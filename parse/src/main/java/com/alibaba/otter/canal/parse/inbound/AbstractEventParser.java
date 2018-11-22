@@ -40,7 +40,7 @@ import com.alibaba.otter.canal.sink.exception.CanalSinkException;
 
 /**
  * 抽象的EventParser, 最大化共用mysql/oracle版本的实现
- * 
+ *
  * @author jianghang 2013-1-20 下午08:10:25
  * @version 1.0.0
  */
@@ -99,6 +99,7 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
     protected MultiStageCoprocessor                  multiStageCoprocessor;
     protected ParserExceptionHandler                 parserExceptionHandler;
     protected long                                   serverId;
+    protected EntryPosition                          initPosition;
 
     protected abstract BinlogParser buildParser();
 
@@ -124,7 +125,11 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
         }
     }
 
-    public AbstractEventParser(){
+    public void setInitPosition(EntryPosition position) {
+        this.initPosition = position;
+    }
+
+    public AbstractEventParser() {
         // 初始化一下
         transactionBuffer = new EventTransactionBuffer(new TransactionFlushCallback() {
 
@@ -156,7 +161,18 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
         // 构造bin log parser
         binlogParser = buildParser();// 初始化一下BinLogParser
         binlogParser.start();
+
+        // 全量同步后的start position
+        if (initPosition != null) {
+            LogPosition logPosition = new LogPosition();
+            logPosition.setPostion(initPosition);
+            LogIdentity identity = new LogIdentity(runningInfo.getAddress(), -1L);
+            logPosition.setIdentity(identity);
+            logPositionManager.persistLogPosition(AbstractEventParser.this.destination, logPosition);
+        }
+
         // 启动工作线程
+        // 建立和mysql master的连接->启动心跳线程->dump准备->获取位点信息->sinkHandler准备好消费->dump->关闭连接
         parseThread = new Thread(new Runnable() {
 
             public void run() {
@@ -182,7 +198,8 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
                         }
                         // 4. 获取最后的位置信息
                         long start = System.currentTimeMillis();
-                        logger.warn("---> begin to find start position, it will be long time for reset or first position");
+                        logger.warn(
+                                "---> begin to find start position, it will be long time for reset or first position");
                         EntryPosition position = findStartPosition(erosaConnection);
                         final EntryPosition startPosition = position;
                         if (startPosition == null) {
@@ -191,12 +208,12 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
 
                         if (!processTableMeta(startPosition)) {
                             throw new CanalParseException("can't find init table meta for " + destination
-                                                          + " with position : " + startPosition);
+                                    + " with position : " + startPosition);
                         }
                         long end = System.currentTimeMillis();
                         logger.warn("---> find start position successfully, {}", startPosition.toString() + " cost : "
-                                                                                 + (end - start)
-                                                                                 + "ms , the next step is binlog dump");
+                                + (end - start)
+                                + "ms , the next step is binlog dump");
                         // 重新链接，因为在找position过程中可能有状态，需要断开后重建
                         erosaConnection.reconnect();
 
@@ -229,9 +246,9 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
                                     }
                                     // 记录一下，出错的位点信息
                                     processSinkError(e,
-                                        this.lastPosition,
-                                        startPosition.getJournalName(),
-                                        startPosition.getPosition());
+                                            this.lastPosition,
+                                            startPosition.getJournalName(),
+                                            startPosition.getPosition());
                                     throw new CanalParseException(e); // 继续抛出异常，让上层统一感知
                                 }
                             }
@@ -251,12 +268,12 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
                             } else {
                                 multiStageCoprocessor.start();
                                 if (StringUtils.isEmpty(startPosition.getJournalName())
-                                    && startPosition.getTimestamp() != null) {
+                                        && startPosition.getTimestamp() != null) {
                                     erosaConnection.dump(startPosition.getTimestamp(), multiStageCoprocessor);
                                 } else {
                                     erosaConnection.dump(startPosition.getJournalName(),
-                                        startPosition.getPosition(),
-                                        multiStageCoprocessor);
+                                            startPosition.getPosition(),
+                                            multiStageCoprocessor);
                                 }
                             }
                         } else {
@@ -265,12 +282,12 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
                                 erosaConnection.dump(MysqlGTIDSet.parse(startPosition.getGtid()), sinkHandler);
                             } else {
                                 if (StringUtils.isEmpty(startPosition.getJournalName())
-                                    && startPosition.getTimestamp() != null) {
+                                        && startPosition.getTimestamp() != null) {
                                     erosaConnection.dump(startPosition.getTimestamp(), sinkHandler);
                                 } else {
                                     erosaConnection.dump(startPosition.getJournalName(),
-                                        startPosition.getPosition(),
-                                        sinkHandler);
+                                            startPosition.getPosition(),
+                                            sinkHandler);
                                 }
                             }
                         }
@@ -280,18 +297,19 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
                         // Event时间没解析过
                         needTransactionPosition.compareAndSet(false, true);
                         logger.error(String.format("dump address %s has an error, retrying. caused by ",
-                            runningInfo.getAddress().toString()), e);
+                                runningInfo.getAddress().toString()), e);
                     } catch (Throwable e) {
                         processDumpError(e);
                         exception = e;
                         if (!running) {
-                            if (!(e instanceof java.nio.channels.ClosedByInterruptException || e.getCause() instanceof java.nio.channels.ClosedByInterruptException)) {
+                            if (!(e instanceof java.nio.channels.ClosedByInterruptException || e
+                                    .getCause() instanceof java.nio.channels.ClosedByInterruptException)) {
                                 throw new CanalParseException(String.format("dump address %s has an error, retrying. ",
-                                    runningInfo.getAddress().toString()), e);
+                                        runningInfo.getAddress().toString()), e);
                             }
                         } else {
                             logger.error(String.format("dump address %s has an error, retrying. caused by ",
-                                runningInfo.getAddress().toString()), e);
+                                    runningInfo.getAddress().toString()), e);
                             sendAlarm(destination, ExceptionUtils.getFullStackTrace(e));
                         }
                         if (parserExceptionHandler != null) {
@@ -308,13 +326,14 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
                             }
                         } catch (IOException e1) {
                             if (!running) {
-                                throw new CanalParseException(String.format("disconnect address %s has an error, retrying. ",
-                                    runningInfo.getAddress().toString()),
-                                    e1);
+                                throw new CanalParseException(
+                                        String.format("disconnect address %s has an error, retrying. ",
+                                                runningInfo.getAddress().toString()),
+                                        e1);
                             } else {
                                 logger.error("disconnect address {} has an error, retrying., caused by ",
-                                    runningInfo.getAddress().toString(),
-                                    e1);
+                                        runningInfo.getAddress().toString(),
+                                        e1);
                             }
                         }
                     }
@@ -345,8 +364,8 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
 
         parseThread.setUncaughtExceptionHandler(handler);
         parseThread.setName(String.format("destination = %s , address = %s , EventParser",
-            destination,
-            runningInfo == null ? null : runningInfo.getAddress()));
+                destination,
+                runningInfo == null ? null : runningInfo.getAddress()));
         parseThread.start();
     }
 
@@ -380,7 +399,7 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
     }
 
     protected boolean consumeTheEventAndProfilingIfNecessary(List<CanalEntry.Entry> entrys) throws CanalSinkException,
-                                                                                           InterruptedException {
+            InterruptedException {
         long startTs = -1;
         boolean enabled = getProfilingEnabled();
         if (enabled) {
@@ -453,12 +472,12 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
     protected void processSinkError(Throwable e, LogPosition lastPosition, String startBinlogFile, Long startPosition) {
         if (lastPosition != null) {
             logger.warn(String.format("ERROR ## parse this event has an error , last position : [%s]",
-                lastPosition.getPostion()),
-                e);
+                    lastPosition.getPostion()),
+                    e);
         } else {
             logger.warn(String.format("ERROR ## parse this event has an error , last position : [%s,%s]",
-                startBinlogFile,
-                startPosition), e);
+                    startBinlogFile,
+                    startPosition), e);
         }
     }
 
@@ -470,9 +489,9 @@ public abstract class AbstractEventParser<EVENT> extends AbstractCanalLifeCycle 
         lastEntryTime = 0L; // 初始化
         if (timer == null) {// lazy初始化一下
             String name = String.format("destination = %s , address = %s , HeartBeatTimeTask",
-                destination,
-                runningInfo == null ? null : runningInfo.getAddress().toString());
-            synchronized (AbstractEventParser.class) {
+                    destination,
+                    runningInfo == null ? null : runningInfo.getAddress().toString());
+            synchronized(AbstractEventParser.class) {
                 // synchronized (MysqlEventParser.class) {
                 // why use MysqlEventParser.class, u know, MysqlEventParser is
                 // the child class 4 AbstractEventParser,

@@ -19,6 +19,7 @@ import com.alibaba.otter.canal.parse.inbound.mysql.MysqlEventParser;
 import com.alibaba.otter.canal.parse.index.CanalLogPositionManager;
 import com.alibaba.otter.canal.protocol.CanalEntry;
 import com.alibaba.otter.canal.protocol.ClientIdentity;
+import com.alibaba.otter.canal.protocol.position.EntryPosition;
 import com.alibaba.otter.canal.sink.CanalEventSink;
 import com.alibaba.otter.canal.store.CanalEventStore;
 import com.alibaba.otter.canal.store.model.Event;
@@ -39,7 +40,7 @@ public class AbstractCanalInstance extends AbstractCanalLifeCycle implements Can
     protected CanalMetaManager                       metaManager;                                                  // 消费信息管理器
     protected CanalAlarmHandler                      alarmHandler;                                                 // alarm报警机制
     protected CanalMQConfig                          mqConfig;                                                     // mq的配置
-
+    protected FullTableFetcher                       fullTableFetcher;
 
 
     @Override
@@ -87,8 +88,17 @@ public class AbstractCanalInstance extends AbstractCanalLifeCycle implements Can
             eventSink.start();
         }
 
+        // 全量同步
+        EntryPosition startPosititon = null;
+        if (fullTableFetcher.syncOnStart()) {
+            logger.info("begin full table sync...");
+            startPosititon = fullTableFetcher.start();
+            logger.info("finish full table sync, start position={}", startPosititon.toString());
+        }
+
         if (!eventParser.isStart()) {
             beforeStartEventParser(eventParser);
+            ((AbstractEventParser)eventParser).setInitPosition(startPosititon);
             eventParser.start();
             afterStartEventParser(eventParser);
         }
@@ -248,5 +258,13 @@ public class AbstractCanalInstance extends AbstractCanalLifeCycle implements Can
     @Override
     public CanalMQConfig getMqConfig() {
         return mqConfig;
+    }
+
+    public FullTableFetcher getFullTableFetcher() {
+        return fullTableFetcher;
+    }
+
+    public void setFullTableFetcher(FullTableFetcher fullTableFetcher) {
+        this.fullTableFetcher = fullTableFetcher;
     }
 }

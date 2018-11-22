@@ -7,11 +7,12 @@ import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.alibaba.otter.canal.common.MQProperties;
+import com.alibaba.otter.canal.instance.core.CanalConfig;
+import com.alibaba.otter.canal.instance.core.CanalMQProducer;
+import com.alibaba.otter.canal.instance.core.MQProperties;
 import com.alibaba.otter.canal.kafka.CanalKafkaProducer;
 import com.alibaba.otter.canal.rocketmq.CanalRocketMQProducer;
 import com.alibaba.otter.canal.server.CanalMQStarter;
-import com.alibaba.otter.canal.spi.CanalMQProducer;
 
 /**
  * canal独立版本启动的入口类
@@ -47,6 +48,9 @@ public class CanalLauncher {
                 canalMQProducer = new CanalRocketMQProducer();
             }
 
+            MQProperties mqProperties = buildMQPosition(properties);
+            CanalConfig.getInstance().setMqProperties(mqProperties);
+
             if (canalMQProducer != null) {
                 // disable netty
                 System.setProperty(CanalConstants.CANAL_WITHOUT_NETTY, "true");
@@ -73,7 +77,7 @@ public class CanalLauncher {
 
             if (canalMQProducer != null) {
                 CanalMQStarter canalMQStarter = new CanalMQStarter(canalMQProducer);
-                MQProperties mqProperties = buildMQPosition(properties);
+//                MQProperties mqProperties = buildMQPosition(properties);
                 canalMQStarter.start(mqProperties);
                 controller.setCanalMQStarter(canalMQStarter);
             }

@@ -16,6 +16,11 @@
 			<artifactId>canal.parse.driver</artifactId>
 			<version>${project.version}</version>
 		</dependency>
+		<dependency>
+			<groupId>com.zaxxer</groupId>
+			<artifactId>HikariCP</artifactId>
+			<version>3.2.0</version>
+		</dependency>
 		<!-- log -->
 		<dependency>
 			<groupId>ch.qos.logback</groupId>
@@ -37,11 +42,6 @@
 		<dependency>
 			<groupId>junit</groupId>
 			<artifactId>junit</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>mysql</groupId>
-			<artifactId>mysql-connector-java</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>

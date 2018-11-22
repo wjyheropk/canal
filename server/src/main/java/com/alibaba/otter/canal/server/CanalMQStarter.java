@@ -10,14 +10,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.alibaba.otter.canal.common.MQProperties;
 import com.alibaba.otter.canal.instance.core.CanalInstance;
 import com.alibaba.otter.canal.instance.core.CanalMQConfig;
+import com.alibaba.otter.canal.instance.core.CanalMQProducer;
+import com.alibaba.otter.canal.instance.core.MQProperties;
 import com.alibaba.otter.canal.kafka.CanalKafkaProducer;
 import com.alibaba.otter.canal.protocol.ClientIdentity;
 import com.alibaba.otter.canal.protocol.Message;
 import com.alibaba.otter.canal.server.embedded.CanalServerWithEmbedded;
-import com.alibaba.otter.canal.spi.CanalMQProducer;
 
 public class CanalMQStarter {
 
@@ -195,6 +195,8 @@ public class CanalMQStarter {
             destination.setPartition(mqConfig.getPartition());
             destination.setPartitionsNum(mqConfig.getPartitionsNum());
             destination.setPartitionHash(mqConfig.getPartitionHashProperties());
+            destination.setTableKey(mqConfig.getTableKeys());
+            destination.setIgnoreColumns(mqConfig.getIgnoreColumns());
             worker(destination, running);
         }
 

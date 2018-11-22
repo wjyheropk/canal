@@ -169,5 +169,7 @@
 		<property name="partition" value="${canal.mq.partition}" />
 		<property name="partitionsNum" value="${canal.mq.partitionsNum}" />
 		<property name="partitionHash" value="${canal.mq.partitionHash}" />
+		<property name="tableKeysStr" value="${canal.mq.table.key}" />
+		<property name="tableIgnoreColumnsStr" value="${canal.mq.table.ignoreColumns}" />
 	</bean>
 </beans>
